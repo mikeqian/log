@@ -6,12 +6,12 @@ import (
 )
 
 func main() {
-	log.SetOutputLevel(Ldebug)
+	log.SetOutputLevel(log.Ldebug)
 
 	start := time.Now()
 
-	for i := 0; i < 5; i++ {
-		Debug("Debug: foo")
+	for i := 0; i < 1000; i++ {
+		log.Debug("Debug: foo")
 	}
 
 	log.Debug(time.Since(start))
