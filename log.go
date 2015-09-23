@@ -1,10 +1,10 @@
-package log4g
+package log
 
 import (
 	"fmt"
 	"io"
 	"os"
-	"runtime"
+
 	"sync"
 	"time"
 )
@@ -17,21 +17,15 @@ var (
 )
 
 var (
-	Debugf logfType
-	Debug  logType
-	Infof  logfType
-	Info   logType
-	Errorf logfType
-	Error  logType
-	Fatalf logfType
-	Fatal  logType
+	Debug logType
+	Info  logType
+	Error logType
 )
 
 const (
 	infoStr  = "[Info ]- "
 	debugStr = "[Debug]- "
 	errorStr = "[Error]- "
-	fatalStr = "[Fatal]- "
 )
 const (
 	LDebug = 1 << iota
@@ -55,6 +49,7 @@ const (
 )
 
 type logfType func(format string, v ...interface{})
+
 type logType func(v ...interface{})
 
 func Close() {
@@ -62,57 +57,23 @@ func Close() {
 	<-recvOver
 }
 
-func InitLogger(lvl int, w io.Writer) {
-	if w != nil {
-		recvBytes = make(chan []byte, 100)
-		go func() {
-			for v := range recvBytes {
-				w.Write(v)
-			}
-			recvBytes = nil
-			recvOver <- true
-		}()
-	}
-
-	if lvl&_debug != 0 {
-		Debugf, Debug = makeLog(debugStr)
-	} else {
-		Debugf, Debug = emptyLogf, emptyLog
-	}
-	if lvl&_info != 0 {
-		Infof, Info = makeLog(infoStr)
-	} else {
-		Infof, Info = emptyLogf, emptyLog
-	}
-	if lvl&_error != 0 {
-		Errorf, Error = makeLog(errorStr)
-	} else {
-		Errorf, Error = emptyLogf, emptyLog
-	}
-	if lvl&_fatal != 0 {
-		Fatalf, Fatal = makeLog(fatalStr)
-	} else {
-		Fatalf, Fatal = emptyLogf, emptyLog
-	}
+func InitLogger(w io.Writer) {
+	Debug = makeLog(debugStr)
+	Info = makeLog(infoStr)
+	Error = makeLog(errorStr)
 }
 
-func makeLog(prefix string) (x logfType, y logType) {
-	return func(format string, v ...interface{}) {
-			loggerStd.output(prefix, 2, fmt.Sprintf(format, v...))
-		},
-		func(v ...interface{}) {
-			loggerStd.output(prefix, 2, fmt.Sprintln(v...))
-		}
+func makeLog(prefix string) (y logType) {
+	return func(v ...interface{}) {
+		loggerStd.write(prefix, fmt.Sprintln(v...))
+	}
 }
-
-func emptyLogf(format string, v ...interface{}) {}
-func emptyLog(v ...interface{})                 {}
 
 type logger struct {
-	mu   sync.Mutex
-	flag int
-	out  io.Writer
-	buf  []byte
+	mutex sync.Mutex
+	flag  int
+	out   io.Writer
+	buf   []byte
 }
 
 func itoa(buf *[]byte, i int, wid int) {
@@ -175,22 +136,13 @@ func (l *logger) formatHeader(buf *[]byte, t time.Time, file string, line int) {
 	}
 }
 
-func (l *logger) output(prefix string, calldepth int, s string) error {
+func (l *logger) write(prefix string, s string) error {
 	now := time.Now()
 	var file string
 	var line int
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.flag&(lshortfile|llongfile) != 0 {
-		l.mu.Unlock()
-		var ok bool
-		_, file, line, ok = runtime.Caller(calldepth)
-		if !ok {
-			file = "???"
-			line = 0
-		}
-		l.mu.Lock()
-	}
+	l.mutex.Lock()
+	defer l.mutex.Unlock()
+
 	l.buf = l.buf[:0]
 	l.buf = append(l.buf, prefix...)
 
